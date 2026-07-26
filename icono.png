@@ -1,0 +1,51 @@
+# ============================================================
+#  CONFIGURACIÓN DEL SCRAPER DE LEADS
+#  Edita este archivo. No necesitas tocar el código.
+# ============================================================
+
+busqueda:
+  # Nichos. Puedes poner SINÓNIMOS separados por "|" para captar más.
+  # El primer término es el nombre de la hoja; todos se buscan y se
+  # deduplican juntos.
+  nichos:
+    - "gimnasios | gym | crossfit | centro de acondicionamiento físico"
+    - "restaurantes | restaurante | comidas rápidas"
+    - "peluquerías | salón de belleza | barbería"
+    - "ferreterías | ferretería"
+
+  # --- OPCIÓN A: zonas manuales (con coordenadas) ---
+  # Para sacar coordenadas: Google Maps -> clic derecho en el punto.
+  zonas:
+    - { nombre: "Ibagué Centro", lat: 4.4389, lng: -75.2322 }
+    - { nombre: "Ibagué Norte",  lat: 4.4650, lng: -75.2100 }
+    - { nombre: "Ibagué Sur",    lat: 4.4100, lng: -75.1800 }
+
+  # --- OPCIÓN B: cuadrícula automática ---
+  # Si usar: true, se ignora la lista "zonas" y se genera una malla
+  # de filas x columnas alrededor del centro, cubriendo el radio.
+  grilla:
+    usar: false
+    centro_lat: 4.4389
+    centro_lng: -75.2322
+    radio_km: 6
+    filas: 3
+    columnas: 3
+
+  zoom: "14z"              # Radio por celda: 15z pequeño ... 12z amplio
+  target_por_nicho: 100    # Máximo de leads por nicho
+
+rendimiento:
+  concurrencia: 2          # Pestañas en paralelo. 1 = seguro, 2-3 = óptimo
+  headless: false          # false = ves el navegador; true = oculto
+  reintentos: 3            # Intentos ante fallo de red/timeout
+  descanso_cada: 40        # Pausa breve cada N negocios (anti-bloqueo)
+  enfriamiento_seg: 180    # Espera si detecta bloqueo en modo oculto
+
+extraccion:
+  extraer_email: true      # Buscar email en la web del negocio
+  extraer_redes: true      # Buscar WhatsApp, Instagram y Facebook
+  timeout_web_seg: 10
+
+salida:
+  archivo_excel: "leads.xlsx"
+  carpeta_temp: "temp_csv"
