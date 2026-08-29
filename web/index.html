@@ -213,7 +213,8 @@
     <div class="prudente"><div class="h">Anti-captcha</div>
       <label class="check"><input type="checkbox" id="prudente"> Modo prudente (1 pestaña, lento)</label>
       <label class="check"><input type="checkbox" id="persistente" checked> Sesión persistente</label>
-      <div class="d">Si Google muestra captchas seguido, activa el modo prudente.</div></div>
+      <label class="check"><input type="checkbox" id="modoprueba"> 🧪 Modo prueba (1 nicho, 1 zona, 8 leads)</label>
+      <div class="d">Si Google muestra captchas seguido, activa el modo prudente. El modo prueba hace una corrida mínima en segundos para verificar que todo funciona.</div></div>
     <div class="field"><label>Carpeta de exportación</label>
       <div class="row"><input id="carpeta" readonly placeholder="(carpeta del perfil)">
       <button class="ib" onclick="elegirCarpeta()">…</button></div></div>
@@ -428,7 +429,8 @@ function leerConfig(){return{
   radio:document.getElementById('radio').value,malla:document.getElementById('malla').value,
   zoom:document.getElementById('zoom').value,target:document.getElementById('target').value,conc:document.getElementById('conc').value,
   email:document.getElementById('email').checked,redes:document.getElementById('redes').checked,
-  modo_prudente:document.getElementById('prudente').checked,sesion_persistente:document.getElementById('persistente').checked};}
+  modo_prudente:document.getElementById('prudente').checked,sesion_persistente:document.getElementById('persistente').checked,
+  modo_prueba:document.getElementById('modoprueba').checked};}
 function aplicarConfig(c){c=c||{};
   document.getElementById('nichos').value=(c.nichos||["gimnasios | gym | crossfit","restaurantes | comidas rápidas","peluquerías | barbería"]).join('\n');
   document.getElementById('zonas').value=c.zonas_txt!==undefined?c.zonas_txt:"Ibagué Centro, 4.4389, -75.2322\nIbagué Norte, 4.4650, -75.2100";
@@ -438,7 +440,8 @@ function aplicarConfig(c){c=c||{};
   if(c.zoom)document.getElementById('zoom').value=c.zoom;if(c.target)document.getElementById('target').value=c.target;
   if(c.conc)document.getElementById('conc').value=c.conc;
   document.getElementById('email').checked=c.email!==false;document.getElementById('redes').checked=c.redes!==false;
-  document.getElementById('prudente').checked=!!c.modo_prudente;document.getElementById('persistente').checked=c.sesion_persistente!==false;}
+  document.getElementById('prudente').checked=!!c.modo_prudente;document.getElementById('persistente').checked=c.sesion_persistente!==false;
+  document.getElementById('modoprueba').checked=!!c.modo_prueba;}
 
 async function cambiarPerfil(){await api().guardar_config(leerConfig());
   const n=document.getElementById('selPerfil').value;const r=await api().seleccionar_perfil(n);
