@@ -1,0 +1,12 @@
+# Compilación
+build/
+dist/
+*.spec.bak
+__pycache__/
+*.pyc
+
+# Resultados y datos locales
+temp_csv/
+resultados/
+leads.xlsx
+scraper.log

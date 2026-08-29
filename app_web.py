@@ -214,6 +214,7 @@ class Api:
                             "descanso_cada": 25 if c.get("modo_prudente") else 40,
                             "enfriamiento_seg": 180,
                             "modo_prudente": bool(c.get("modo_prudente", False)),
+                            "modo_prueba": bool(c.get("modo_prueba", False)),
                             "user_data_dir": user_dir},
             "extraccion": {"extraer_email": bool(c.get("email", True)),
                            "extraer_redes": bool(c.get("redes", True)),

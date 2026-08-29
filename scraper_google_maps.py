@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import math
+import time
 import random
 import logging
 import threading
@@ -268,6 +269,40 @@ def calcular_score(f):
     return round(s, 1)
 
 
+async def aceptar_consentimiento(page):
+    """Si aparece la pantalla o el diálogo de consentimiento de Google, lo acepta.
+    Es una de las causas más comunes de 'no llegan resultados': con cookies nuevas,
+    Google redirige a consent.google.com y sin aceptar no carga el mapa."""
+    selectores = [
+        'button[aria-label="Aceptar todo"]',
+        'button[aria-label="Rechazar todo"]',
+        'button[aria-label="Accept all"]',
+        'button[aria-label="Reject all"]',
+        'form[action*="consent"] button[jsname]',
+        'button:has-text("Aceptar todo")',
+        'button:has-text("Rechazar todo")',
+        'button:has-text("Acepto")',
+        'button:has-text("Accept all")',
+    ]
+    hizo_click = False
+    for sel in selectores:
+        try:
+            btn = await page.query_selector(sel)
+            if btn:
+                await btn.click()
+                hizo_click = True
+                await page.wait_for_timeout(1500)
+                break
+        except Exception:
+            continue
+    if hizo_click:
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=8000)
+        except Exception:
+            pass
+    return hizo_click
+
+
 async def detectar_bloqueo(page):
     if "/sorry/" in page.url or "consent.google" in page.url:
         return True
@@ -431,8 +466,9 @@ class EscritorCSV:
 async def recolectar_en_zona(page, termino, zona, faltan, zoom):
     query = termino.replace(" ", "+")
     url = (f"https://www.google.com/maps/search/{query}/"
-           f"@{zona['lat']},{zona['lng']},{zoom}")
+           f"@{zona['lat']},{zona['lng']},{zoom}?hl=es")
     await page.goto(url, wait_until="domcontentloaded")
+    await aceptar_consentimiento(page)
     if await detectar_bloqueo(page):
         return "BLOQUEO"
     await page.wait_for_timeout(2000 + random.randint(0, 600))
@@ -440,11 +476,30 @@ async def recolectar_en_zona(page, termino, zona, faltan, zoom):
     try:
         await page.wait_for_selector('div[role="feed"]', timeout=15000)
     except Exception:
+        # Caso 1: Google abrió directamente una sola ficha (resultado único).
+        if "/maps/place/" in page.url:
+            log.info(f"  Resultado único directo para '{termino}' @ {zona['nombre']}")
+            return [page.url]
+        # Caso 2: no cargó el feed (layout distinto, sin resultados,
+        # consentimiento o bloqueo). Lo anotamos y guardamos captura.
+        log.warning(f"  ⚠ No cargó la lista para '{termino}' @ {zona['nombre']} "
+                    f"(url actual: {page.url})")
+        try:
+            dbg = os.path.join(dir_datos(), "debug")
+            os.makedirs(dbg, exist_ok=True)
+            await page.screenshot(
+                path=os.path.join(dbg, f"sin_lista_{int(time.time())}.png"))
+        except Exception:
+            pass
         return enlaces
     feed = await page.query_selector('div[role="feed"]')
     intentos = 0
     while len(enlaces) < faltan and intentos < 6:
-        for c in await page.query_selector_all('a.hfpxzc'):
+        tarjetas = await page.query_selector_all('a.hfpxzc')
+        if not tarjetas:  # respaldo por si Google cambió la clase de la tarjeta
+            tarjetas = await page.query_selector_all(
+                'div[role="feed"] a[href*="/maps/place/"]')
+        for c in tarjetas:
             href = await c.get_attribute("href")
             if href and href not in enlaces:
                 enlaces.append(href)
@@ -503,6 +558,7 @@ async def worker_fase1(page, cola, acumulado, lock, cfg):
 # ============================================================
 async def extraer_negocio(page, href, canonico, zona):
     await page.goto(href, wait_until="domcontentloaded")
+    await aceptar_consentimiento(page)
     try:
         await page.wait_for_selector("h1.DUwDvf, h1.fontHeadlineLarge", timeout=10000)
     except Exception:
@@ -718,9 +774,19 @@ def construir_excel(carpeta_temp, archivo_salida):
 # ============================================================
 async def run(cfg):
     global LENTO
+    t_inicio = time.time()
     b, r, s = cfg["busqueda"], cfg["rendimiento"], cfg["salida"]
     nichos = parse_nichos(b["nichos"])
     zonas = resolver_zonas(b)
+
+    # Modo prueba: corrida mínima para verificar que todo funciona en segundos.
+    if r.get("modo_prueba"):
+        nichos = nichos[:1]
+        zonas = zonas[:1]
+        b["target_por_nicho"] = min(int(b.get("target_por_nicho", 100) or 100), 8)
+        r["concurrencia"] = 1
+        log.info("🧪 MODO PRUEBA: 1 nicho, 1 zona, hasta "
+                 f"{b['target_por_nicho']} resultados.")
 
     # Modo prudente: fuerza 1 pestaña y ritmo lento (menos captchas)
     LENTO = bool(r.get("modo_prudente", False))
@@ -753,6 +819,16 @@ async def run(cfg):
                     contexto = await navegador.new_context(locale="es-ES",
                                                            user_agent=USER_AGENT)
                 await contexto.add_init_script(STEALTH_JS)
+                # Cookie que evita la pantalla de consentimiento de Google.
+                try:
+                    await contexto.add_cookies([{
+                        "name": "CONSENT",
+                        "value": f"YES+cb.20210328-17-p0.es+FX+{random.randint(100, 999)}",
+                        "domain": ".google.com",
+                        "path": "/",
+                    }])
+                except Exception:
+                    pass
                 existentes = contexto.pages
                 paginas = list(existentes[:concurrencia])
                 while len(paginas) < concurrencia:
@@ -816,11 +892,13 @@ async def run(cfg):
         log.error(f"No se pudo generar el Excel: {e}")
         stats = {}
     total = sum(v["total"] for v in stats.values())
+    dur = time.time() - t_inicio
     log.info("=" * 50)
     if PARAR.is_set():
         log.info(f"⏹ Detenido — {total} negocios guardados hasta ahora.")
     else:
         log.info(f"✅ LISTO — {total} negocios en '{s['archivo_excel']}'")
+    log.info(f"⏱ Tiempo total: {dur:.1f}s")
     for nicho, v in stats.items():
         log.info(f"   {nicho}: {v['total']} (tel {v['tel']}, wa {v['wa']}, "
                  f"email {v['mail']}, redes {v['red']}, sin web {v['sinweb']})")
